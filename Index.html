@@ -3,187 +3,302 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 即時影像掃碼查表系統</title>
-    <script src="https://unpkg.com/barcode-detector@2.2.2/dist/index.umd.min.js"></script>
+    <title>HTM 報表轉換 XLSX 工具</title>
+    <!-- 引入 SheetJS 函式庫用於生成 Excel 檔案 -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f7; color: #333; text-align: center; }
-        .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h2 { margin-top: 0; color: #1d1d1f; }
-        button { width: 100%; padding: 12px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin: 8px 0; }
-        #start-btn { background-color: #0071e3; color: white; font-size: 18px; }
-        #stop-btn { background-color: #ff453a; color: white; display: none; }
-        #video-container { width: 100%; position: relative; display: none; margin-top: 10px; border-radius: 8px; overflow: hidden; background: black; }
-        video { width: 100%; display: block; }
-        .scan-laser { position: absolute; top: 50%; left: 5%; width: 90%; height: 2px; background: #34c759; transform: translateY(-50%); box-shadow: 0 0 6px #34c759; animation: laser-move 2s infinite ease-in-out; }
-        @keyframes laser-move { 0%, 100% { top: 20%; } 50% { top: 80%; } }
-        .form-group { margin: 20px 0; text-align: left; }
-        label { font-weight: bold; display: block; margin-bottom: 5px; }
-        input[type="text"] { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
-        #result-box { margin-top: 20px; padding: 15px; border-radius: 8px; background: #f2f2f7; text-align: left; display: none; }
-        .result-item { margin: 8px 0; font-size: 16px; border-bottom: 1px solid #e5e5ea; padding-bottom: 8px; }
-        .result-item:last-child { border: none; }
-        .status-text { color: #0071e3; font-weight: bold; margin: 10px 0; min-height: 24px; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, "Microsoft JhengHei";
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 40px 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        h2 {
+            color: #2c3e50;
+            margin-top: 0;
+            border-bottom: 2px solid #edf2f7;
+            padding-bottom: 15px;
+        }
+        .rule-box {
+            background-color: #ebf8ff;
+            border-left: 4px solid #3182ce;
+            padding: 15px;
+            margin-bottom: 25px;
+            border-radius: 0 8px 8px 0;
+            font-size: 14px;
+        }
+        .rule-box ul {
+            margin: 5px 0 0 0;
+            padding-left: 20px;
+        }
+        .upload-area {
+            border: 3px dashed #cbd5e0;
+            padding: 40px 20px;
+            text-align: center;
+            background: #fafbfd;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #3182ce;
+            background-color: #f7fafc;
+        }
+        .upload-area p {
+            margin: 0;
+            font-size: 16px;
+            color: #4a5568;
+        }
+        .upload-area span {
+            color: #3182ce;
+            font-weight: bold;
+            text-decoration: underline;
+        }
+        #file-input {
+            display: none;
+        }
+        .btn-convert {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background-color: #319795;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background 0.2s;
+        }
+        .btn-convert:hover {
+            background-color: #2c7a7b;
+        }
+        .btn-convert:disabled {
+            background-color: #cbd5e0;
+            cursor: not-allowed;
+        }
+        #status-msg {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 6px;
+            display: none;
+            font-size: 14px;
+        }
+        .success { background-color: #c6f6d5; color: #22543d; }
+        .error { background-color: #fed7d7; color: #742a2a; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>📱 AI 即時影像掃碼系統</h2>
+    <h2>HTM 訂單數量轉換 XLSX 工具</h2>
     
-    <button id="start-btn">📷 開啟即時動態掃描</button>
-    <button id="stop-btn">🛑 關閉相機</button>
-
-    <div id="video-container">
-        <video id="video" autoplay playsinline></video>
-        <div class="scan-laser"></div>
+    <div class="rule-box">
+        <strong>轉換規則說明：</strong>
+        <ul>
+            <li>料號 = 擷取自 HTML 內之「物料」；品名 = 擷取自 HTML 內之「說明」。</li>
+            <li>當月耗用量 = -(發貨總計 (負值) + 所有 442B / Z02 / 49XXXX 開頭物料文件的數量合計)。</li>
+            <li>月初下訂量 = 儲存地點 442B / 異動類型 101 / 物料文件 50XXXX 開頭該列之數量。</li>
+        </ul>
     </div>
 
-    <div id="status" class="status-text"></div>
-
-    <div class="form-group">
-        <label for="barcode-input">條碼數值：</label>
-        <input type="text" id="barcode-input" placeholder="自動或手動輸入條碼值">
-        <button id="search-btn" style="background-color: #34c759; color: white;">🔍 執行查表</button>
+    <div class="upload-area" id="drop-zone">
+        <p>將 HTM 檔案拖曳至此處，或 <span>點擊瀏覽檔案</span></p>
+        <input type="file" id="file-input" accept=".htm,.html">
     </div>
-
-    <div id="result-box">
-        <h3 style="margin-top:0; color:#0071e3;">🔍 查詢結果</h3>
-        <div id="search-result"></div>
-    </div>
+    
+    <button class="btn-convert" id="btn-process" disabled>開始轉換並下載 Excel</button>
+    <div id="status-msg"></div>
 </div>
 
 <script>
-    // 💡 填入你剛剛部署好、新版本的 GAS 正式網址
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbytK783egSqaS3Bk1-D3IwhVCLVzOGqsr6K8HvRV0eXYqSJq0YCQ_QRdI2ULAeCQoZ9Hw/exec";
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const btnProcess = document.getElementById('btn-process');
+    const statusMsg = document.getElementById('status-msg');
+    let loadedFileContent = '';
+    let loadedFileName = '';
 
-    const video = document.getElementById('video');
-    const videoContainer = document.getElementById('video-container');
-    const startBtn = document.getElementById('start-btn');
-    const stopBtn = document.getElementById('stop-btn');
-    const statusDiv = document.getElementById('status');
-    const barcodeInput = document.getElementById('barcode-input');
-    const resultBox = document.getElementById('result-box');
-    const resultDiv = document.getElementById('search-result');
+    // 點擊上傳
+    dropZone.addEventListener('click', () => fileInput.click());
 
-    let stream = null;
-    let animationFrameId = null;
-    let isScanning = false;
+    // 檔案選取變更
+    fileInput.addEventListener('change', handleFileSelect);
 
-    // 初始化 Google AI 條碼偵測器
-    const barcodeDetector = new BarcodeDetector({
-        formats: ['code_128', 'code_39', 'ean_13', 'ean_8', 'itf']
+    // 拖曳效果
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) {
+            fileInput.files = e.dataTransfer.files;
+            handleFileSelect();
+        }
     });
 
-    // 啟動即時動態鏡頭
-    startBtn.addEventListener('click', async () => {
-        resultBox.style.display = 'none';
-        statusDiv.innerText = "正在初始化相機...";
+    function handleFileSelect() {
+        const file = fileInput.files[0];
+        if (!file) return;
         
-        try {
-            // 請求開啟後置鏡頭，並優化解析度提高辨識率
-            stream = await navigator.mediaDevices.getUserMedia({
-                video: { 
-                    facingMode: "environment",
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                }
-            });
-            
-            video.srcObject = stream;
-            videoContainer.style.display = 'block';
-            startBtn.style.display = 'none';
-            stopBtn.style.display = 'block';
-            statusDiv.innerText = "🤖 AI 錄影掃描中，請對準條碼...";
-            
-            isScanning = true;
-            // 觸發動態追蹤迴圈
-            tick();
-        } catch (err) {
-            console.error(err);
-            statusDiv.innerText = "";
-            alert("無法開啟相機權限，或此環境不支援。");
-        }
-    });
-
-    // 動態影像偵測迴圈 (每秒嘗試辨識數次)
-    async function tick() {
-        if (!isScanning) return;
-
-        // 確保視訊已經有畫面數據傳入
-        if (video.readyState === video.HAVE_CURRENT_DATA || video.readyState === video.HAVE_ENOUGH_DATA) {
-            try {
-                // 💡 AI 引擎直接對進行中的 <video> 標籤抽樣偵測！
-                const barcodes = await barcodeDetector.detect(video);
-                if (barcodes && barcodes.length > 0) {
-                    const detectedValue = barcodes[0].rawValue;
-                    console.log("即時 AI 辨識成功:", detectedValue);
-                    
-                    barcodeInput.value = detectedValue;
-                    stopScanning(); // 成功抓到就自動停掉相機
-                    
-                    runGoogleSearch(detectedValue); // 執行查表
-                    return; 
-                }
-            } catch (err) {
-                console.error("即時辨識出錯:", err);
-            }
-        }
-        // 繼續下一影格的偵測
-        animationFrameId = requestAnimationFrame(tick);
-    }
-
-    // 關閉相機功能
-    stopBtn.addEventListener('click', stopScanning);
-    function stopScanning() {
-        isScanning = false;
-        if (animationFrameId) cancelAnimationFrame(animationFrameId);
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-        }
-        video.srcObject = null;
-        videoContainer.style.display = 'none';
-        startBtn.style.display = 'block';
-        stopBtn.style.display = 'none';
-        statusDiv.innerText = "";
-    }
-
-    // 手動查詢按鈕
-    document.getElementById('search-btn').addEventListener('click', () => {
-        runGoogleSearch(barcodeInput.value);
-    });
-
-    // 跨網域 JSONP 呼叫後端 GAS API
-    function runGoogleSearch(barcode) {
-        if (!barcode) {
-            alert("請先輸入或掃描條碼！");
-            return;
-        }
-        
-        resultBox.style.display = 'block';
-        resultDiv.innerHTML = '<p style="color:#86868b; font-style:italic;">正在連線雲端試算表查表中...</p>';
-
-        // 動態建立 Script 標籤進行 JSONP 請求，完美突破網域限制
-        const callbackName = 'gasCallback_' + Math.round(100000 * Math.random());
-        window[callbackName] = function(response) {
-            if (response.success) {
-                resultDiv.innerHTML = `
-                    <div class="result-item"><strong>料號：</strong> ${response.itemCode}</div>
-                    <div class="result-item"><strong>條碼：</strong> ${response.barcode}</div>
-                    <div class="result-item"><strong>品名：</strong> ${response.name}</div>
-                    <div class="result-item"><strong>儲位：</strong> ${response.location}</div>
-                `;
-            } else {
-                resultDiv.innerHTML = `<p style="color:#ff453a; font-weight:bold;">⚠️ ${response.msg}</p>`;
-            }
-            // 清理暫存標籤與函式
-            document.body.removeChild(script);
-            delete window[callbackName];
+        loadedFileName = file.name;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            loadedFileContent = e.target.result;
+            showStatus(`已成功載入檔案：${loadedFileName}`, 'success');
+            btnProcess.disabled = false;
         };
-
-        const script = document.createElement('script');
-        script.src = `${GAS_API_URL}?barcode=${encodeURIComponent(barcode)}&callback=${callbackName}`;
-        document.body.appendChild(script);
+        reader.onerror = function() {
+            showStatus('讀取檔案時發生錯誤！', 'error');
+            btnProcess.disabled = true;
+        };
+        reader.readAsText(file, 'UTF-8');
     }
+
+    function showStatus(msg, type) {
+        statusMsg.textContent = msg;
+        statusMsg.className = type;
+        statusMsg.style.display = 'block';
+    }
+
+    // 解析特殊文字中的整數值 (如： "8-" 轉為 -8, "15" 轉為 15)
+    function parseQty(qtyStr) {
+        if (!qtyStr) return 0;
+        let clean = qtyStr.replace(/\s+/g, '');
+        if (clean.endsWith('-')) {
+            return -parseInt(clean.slice(0, -1), 10);
+        }
+        let val = parseInt(clean, 10);
+        return isNaN(val) ? 0 : val;
+    }
+
+    // 核心轉換邏輯
+    btnProcess.addEventListener('click', () => {
+        try {
+            // 利用瀏覽器內建 DOMParser 解析 HTML 文字
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(loadedFileContent, 'text/html');
+            
+            // 由於原始 HTM 不是標準嚴謹的單一 Table，我們改用文字切分法來精準劃分「物料區塊」
+            const sections = loadedFileContent.split(/物料&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/);
+            if (sections.length <= 1) {
+                // 如果找不到 &nbsp; 改用一般空白再試一次
+                const altSections = loadedFileContent.split(/物料\s+/);
+                if (altSections.length <= 1) {
+                    throw new Error('找不到標準的「物料」區塊標籤，請確認是否為正確的報表格式。');
+                }
+            }
+
+            // 重新依照文字精準切分區塊
+            const htmlParts = loadedFileContent.split(/物料(?:&nbsp;|\s){5,}/);
+            const dataRows = [];
+
+            // 從 index 1 開始，因為 index 0 是第一個物料之前的網頁檔頭
+            for (let i = 1; i < htmlParts.length; i++) {
+                const sec = htmlParts[i];
+                
+                // 1. 擷取料號 (直到第一個引號、標籤或換行)
+                const matMatch = sec.match(/^([A-Za-z0-9]+)/);
+                if (!matMatch) continue;
+                const matNo = matMatch[1];
+
+                // 2. 擷取品名 (說明)
+                const descMatch = sec.match(/(?:說明)(?:&nbsp;|\s){5,}([^<\n]+)/);
+                let desc = descMatch ? descMatch[1].trim() : "";
+                // 移除可能的 HTML 轉義字元 (如 &#x2f; 轉 /)
+                const txtNode = parser.parseFromString(`<span>${desc}</span>`, 'text/html');
+                desc = txtNode.body.textContent.replace(/&nbsp;/g, ' ').trim();
+
+                // 3. 擷取發貨總計
+                const dispMatch = sec.match(/發貨總計(?:&nbsp;|\s)+([0-9\-]+)/);
+                let dispVal = 0;
+                if (dispMatch) {
+                    dispVal = parseQty(dispMatch[1]);
+                }
+
+                // 4. 解析該區塊底下的表格列 <tr>
+                // 建立一個臨時容器來解析此區塊的 HTML
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = sec.split(/<\/table>/)[0] + '</table>'; // 只取到 table 結束
+                const trs = tempDiv.querySelectorAll('tr');
+
+                let z02_49_sum = 0;
+                let m101_50_sum = 0;
+
+                trs.forEach(tr => {
+                    const tds = tr.querySelectorAll('td');
+                    if (tds.length >= 7) {
+                        const sloc = tds[0].textContent.replace(/\s+/g, '').trim();
+                        const mvt = tds[1].textContent.replace(/\s+/g, '').trim();
+                        const docNo = tds[3].textContent.replace(/\s+/g, '').trim();
+                        const qtyStr = tds[6].textContent.trim();
+                        const qty = parseQty(qtyStr);
+
+                        // 規則 2: 所有 442B + Z02 + 49XXXX 數量合計
+                        if (sloc === '442B' && mvt === 'Z02' && docNo.startsWith('49')) {
+                            z02_49_sum += qty;
+                        }
+
+                        // 規則 3: 月初下訂量 = 442B + 101 + 50XXXX
+                        if (sloc === '442B' && mvt === '101' && docNo.startsWith('50')) {
+                            m101_50_sum += qty;
+                        }
+                    }
+                });
+
+                // 當月耗用量 = -(發貨總計(負值) + 所有442BZ02 49XXXX數量合計)
+                const consumption = -(dispVal + z02_49_sum);
+
+                dataRows.push({
+                    '料號': matNo,
+                    '品名': desc,
+                    '當月耗用量': consumption,
+                    '月初下訂量': m101_50_sum
+                });
+            }
+
+            if (dataRows.length === 0) {
+                throw new Error('未解析到任何物料資料，請檢查檔案內容是否完整。');
+            }
+
+            // 5. 轉換成 Excel 檔案並下載
+            const worksheet = XLSX.utils.json_to_sheet(dataRows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "訂單數量統計");
+
+            // 自動調整欄寬
+            const max_len = dataRows.reduce((w, r) => Math.max(w, r['品名'].length), 10);
+            worksheet['!cols'] = [
+                { wch: 8 }, // 料號
+                { wch: Math.min(max_len * 2, 40) }, // 品名 (考慮中文字寬度)
+                { wch: 12 }, // 當月耗用量
+                { wch: 12 }  // 月初下訂量
+            ];
+
+            // 產生檔名並導出
+            const outputName = loadedFileName.replace(/\.[^/.]+$/, "") + "_整理後訂單數量.xlsx";
+            XLSX.writeFile(workbook, outputName);
+            showStatus(`轉換成功！已下載檔案：${outputName}`, 'success');
+
+        } catch (err) {
+            showStatus(`轉換失敗：${err.message}`, 'error');
+            console.error(err);
+        }
+    });
 </script>
+
 </body>
 </html>
